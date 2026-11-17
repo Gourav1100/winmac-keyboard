@@ -15,6 +15,8 @@ import subprocess
 import sys
 
 from generate import PREFIX, build_rules, vscode_bindings
+from shortcuts import ZSH_BINDINGS
+from terminal_profiles import iterm_profile, terminal_profile, KITTY_CONFIG
 
 HOME = Path.home()
 KARABINER = HOME / ".config/karabiner/karabiner.json"
@@ -75,8 +77,13 @@ def merge_zshrc(current, bindings):
 
 def read_alttab_preferences():
     result = subprocess.run(
-        ["defaults", "export", ALTTAB_DOMAIN, "-"], capture_output=True, check=True
+        ["defaults", "export", ALTTAB_DOMAIN, "-"], capture_output=True
     )
+    if result.returncode:
+        message = result.stderr.decode(errors='replace')
+        if 'does not exist' in message:
+            return {}  # Fresh AltTab install: no persistent preferences yet.
+        raise RuntimeError('Cannot back up AltTab preferences: ' + message)
     return plistlib.loads(result.stdout)
 
 
@@ -222,6 +229,8 @@ def main():
         action="store_true",
         help="Print device and planned changes without writing",
     )
+    p.add_argument('--import-snapshot', action='store_true',
+                   help='Explicitly restore the captured configuration instead of maintained defaults')
     a = p.parse_args()
     if platform.system() != "Darwin" and not a.dry_run:
         p.error("Installation requires macOS. Use --dry-run for inspection elsewhere.")
@@ -259,7 +268,9 @@ def main():
     print(
         f'Target: {"all keyboards" if device is None else f"external keyboard vendor={device[0]} product={device[1]}"}'
     )
-    snapshot = load(SNAPSHOT)
+    snapshot = load(SNAPSHOT) if a.import_snapshot else None
+    if a.import_snapshot and snapshot is None:
+        p.error("Captured snapshot not found")
     if snapshot:
         simple = copy.deepcopy(snapshot["simple_modifications"])
         rules = scope_captured_rules(
@@ -277,15 +288,19 @@ def main():
                 ("right_command", "right_control"),
             )
         ]
-        rules = build_rules(device)
+        rules = build_rules(device, STATE / 'finder_actions.js')
         ours = vscode_bindings()
-        alttab = None
+        # AltTab 11.x: hold Option, press Tab; Shift reverses the selection.
+        # Remove overrides so AltTab uses its native Option+Tab / Shift defaults.
+        # Recent versions archive ShortcutRecorder objects; strings are not valid.
+        alttab = {'holdShortcut': None, 'nextWindowShortcut': None,
+                  'previousWindowShortcut': None}
     current = load(VSCODE, jsonc=True)
     if current is None:
         current = []
     if not isinstance(current, list):
         p.error("VS Code keybindings.json must be an array")
-    zsh_bindings = snapshot.get("zsh_bindings") if snapshot else None
+    zsh_bindings = snapshot.get("zsh_bindings") if snapshot else ZSH_BINDINGS
     updated_zshrc = None
     if zsh_bindings is not None:
         if not isinstance(zsh_bindings, list) or not all(
@@ -305,10 +320,12 @@ def main():
     if a.dry_run:
         print(
             "Would back up and update Karabiner and VS Code; install AltTab"
-            + (" and restore captured preferences." if alttab is not None else ".")
+            + (" and configure AltTab preferences." if alttab is not None else ".")
         )
         if updated_zshrc is not None:
             print("Would back up and update .zshrc keyboard bindings.")
+        if not a.import_snapshot:
+            print("Would install Finder helper and navigation profiles for Terminal, iTerm2 and kitty.")
         return
     ensure_brew_install("karabiner-elements", a.skip_brew)
     ensure_brew_install("alt-tab", a.skip_brew)
@@ -317,6 +334,12 @@ def main():
     files = [KARABINER, RULES_FILE, VSCODE]
     if updated_zshrc is not None:
         files.append(ZSHRC)
+    helper = STATE / 'finder_actions.js'
+    terminal_file = STATE / 'WinMac.terminal'
+    kitty_file = STATE / 'kitty.conf'
+    iterm_file = HOME / 'Library/Application Support/iTerm2/DynamicProfiles/winmac.json'
+    if not a.import_snapshot:
+        files.extend([helper, terminal_file, kitty_file, iterm_file])
     backups = {str(f): backup(f, folder) for f in files}
     alt_backup = None
     if alttab is not None:
@@ -375,6 +398,12 @@ def main():
         and r.get("description") not in captured_descriptions
     ]
     cm[:0] = rules
+    if not a.import_snapshot:
+        helper.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(Path(__file__).with_name('finder_actions.js'), helper)
+        terminal_file.write_bytes(plistlib.dumps(terminal_profile(), fmt=plistlib.FMT_BINARY))
+        kitty_file.write_text(KITTY_CONFIG)
+        write(iterm_file, iterm_profile())
     write(KARABINER, cfg)
     write(
         RULES_FILE,
@@ -383,17 +412,26 @@ def main():
     # Override same key+when; preserve all unrelated user bindings.
     ours_ids = {(r["key"], r.get("when")) for r in ours}
     current = [r for r in current if (r.get("key"), r.get("when")) not in ours_ids]
+    if not a.import_snapshot:
+        # Remove only exact legacy objects, including entries whose context changed.
+        legacy_export = load(Path(__file__).resolve().parents[1] / 'config/vscode-keybindings.legacy.json') or []
+        current = [entry for entry in current if entry not in legacy_export]
     current.extend(ours)
     write(VSCODE, current)
     if updated_zshrc is not None:
         ZSHRC.write_text(updated_zshrc)
     if alttab is not None:
-        write_alttab_preferences({**(existing_alttab or {}), **alttab})
+        write_alttab_preferences({k: v for k, v in {**(existing_alttab or {}), **alttab}.items() if v is not None})
     subprocess.run(["open", "-a", "AltTab"], check=False)
     print(
         "\nDone. You must grant Karabiner Input Monitoring/Accessibility, AltTab Accessibility/Screen Recording."
     )
     print("Verify AltTab shortcuts and enable Start at login if desired.")
+    if not a.import_snapshot:
+        print(f"Terminal.app: open {terminal_file} and use its WinMac profile.")
+        print("iTerm2: select the WinMac dynamic profile. Existing profiles are unchanged.")
+        print(f"kitty: include {kitty_file} from kitty.conf, then restart kitty.")
+        print("Finder helper: allow osascript Accessibility/Automation when macOS prompts.")
     print(
         "Karabiner -> Devices: enable your Windows keyboard. Standard F1-F12 should be enabled where applicable."
     )

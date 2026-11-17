@@ -1,17 +1,31 @@
 #!/usr/bin/env python3
-import json,platform,shutil
+"""Read-only checks; actual key delivery still needs testing on macOS."""
+import platform
 from pathlib import Path
-HOME=Path.home()
-print('Platform:',platform.platform())
-for app in ('karabiner-elements','alt-tab','visual-studio-code'):
-    print('Homebrew cask known:',app,'(brew available)' if shutil.which('brew') else '(brew missing)')
-p=HOME/'.config/karabiner/karabiner.json'
-if p.exists():
-    data=json.loads(p.read_text()); profile=next((x for x in data.get('profiles',[]) if x.get('selected')),None)
-    rules=(profile or {}).get('complex_modifications',{}).get('rules',[])
-    print('Karabiner config: OK; managed rules:',sum(r.get('description','').startswith('[WinMac]') for r in rules))
-else: print('Karabiner config: missing')
-v=HOME/'Library/Application Support/Code/User/keybindings.json'
-try: print('VS Code keybindings:',len(json.loads(v.read_text())),'entries')
-except (OSError,ValueError): print('VS Code keybindings missing or not strict JSON (VS Code also accepts JSONC)')
-print('Verify via EventViewer; the keyboard must be enabled in Karabiner Devices.')
+from install import load, STATE
+
+print('Platform:', platform.platform())
+karabiner = Path.home() / '.config/karabiner/karabiner.json'
+if karabiner.exists():
+    data = load(karabiner)
+    profiles = data.get('profiles', [])
+    profile = next((p for p in profiles if p.get('selected')), profiles[0] if profiles else {})
+    rules = profile.get('complex_modifications', {}).get('rules', [])
+    managed = [r for r in rules if r.get('description', '').startswith('[WinMac]')]
+    print('Managed Karabiner rules:', len(managed))
+    descriptions = [r.get('description', '') for r in rules]
+    print('Duplicate rule descriptions:', sorted({d for d in descriptions if descriptions.count(d) > 1}))
+else:
+    print('Karabiner configuration: missing')
+try:
+    vscode = load(Path.home() / 'Library/Application Support/Code/User/keybindings.json', jsonc=True)
+    print('VS Code terminal bindings:', sum(b.get('when') == 'terminalFocus' for b in (vscode or [])))
+except (ValueError, OSError) as error:
+    print('VS Code configuration unreadable:', error)
+for path in [STATE / 'finder_actions.js', STATE / 'WinMac.terminal', STATE / 'kitty.conf',
+             Path.home() / 'Library/Application Support/iTerm2/DynamicProfiles/winmac.json']:
+    print(path, 'present' if path.exists() else 'missing')
+print('Select the WinMac terminal profile/include; existing sessions are unchanged.')
+print('Use Karabiner EventViewer to verify Page Up/Down and Print Screen key codes.')
+print('Test nano paging and Ctrl+X/O/W; zsh bindkey settings do not configure nano.')
+print('Verify Finder helper Accessibility/Automation and AltTab Controls permissions on macOS.')
