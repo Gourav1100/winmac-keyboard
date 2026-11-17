@@ -3,25 +3,21 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('scripts/finder_actions.js', 'utf8');
-function scenario(action, role, {front = true, selected = true, pending = '', copied = true} = {}) {
+function scenario(action, role, {front = true, selected = true, pending = '', copied = true, clipboardChanged = false} = {}) {
     const events = [];
     let marker = pending;
-    let changes = 1;
-    let declared = !!pending;
+    let changes = clipboardChanged ? 2 : 1;
+    let token = pending === 'move' ? '1' : '';
     const pb = {
         get changeCount() { return changes; },
         stringForType() { return marker; },
-        addTypesOwner(types, owner) {
-            assert.deepEqual(Array.from(types), ['org.winmac-keyboard.pending-move']);
-            assert.equal(owner, null);
-            declared = true;
-        },
-        setStringForType(value) {
-            if (!declared) return false;
-            marker = value; changes++; return true;
-        },
+        setStringForType() { throw new Error('Finder clipboard must remain unchanged'); },
+        addTypesOwner() { throw new Error('Finder clipboard must remain unchanged'); },
     };
-    const $ = x => x;
+    const $ = x => ({writeToFileAtomicallyEncodingError() { token = x; marker = x ? 'move' : ''; return true; }});
+    $.NSHomeDirectory = () => ({stringByAppendingPathComponent: x => x});
+    $.NSString = {stringWithContentsOfFileEncodingError: () => token};
+    $.NSUTF8StringEncoding = 4;
     $.NSPasteboard = {generalPasteboard: pb};
     const attr = value => ({value: () => value});
     const root = {attributes: {byName: () => attr('AXWindow')}};
@@ -29,7 +25,7 @@ function scenario(action, role, {front = true, selected = true, pending = '', co
     const se = {processes: {byName: () => ({attributes: {byName: () => attr(element)}})},
         keyCode(code, options) {
             events.push([code, options.using]);
-            if (code === 8 && copied) { marker = ''; declared = false; changes++; }
+            if (code === 8 && copied) { marker = ''; changes++; }
         }};
     const finder = {frontmost: () => front, selection: () => selected ? ['file'] : []};
     const context = vm.createContext({$, ObjC: {import() {}, unwrap: x => x},
@@ -51,4 +47,5 @@ assert.deepEqual(scenario('paste', 'AXOutline', {pending: 'move'}).events, [[9, 
 assert.deepEqual(scenario('paste', 'AXOutline').events, [[9, ['command down']]]);
 assert.equal(scenario('cancel', 'AXOutline', {pending: 'move'}).marker, '');
 assert.deepEqual(scenario('paste', 'AXTextField', {pending: 'move'}).events, [[9, ['command down']]]);
-console.log('Finder helper: 13 control-flow checks passed');
+assert.deepEqual(scenario('paste', 'AXOutline', {pending: 'move', clipboardChanged: true}).events, [[9, ['command down']]]);
+console.log('Finder helper: 14 control-flow checks passed');
