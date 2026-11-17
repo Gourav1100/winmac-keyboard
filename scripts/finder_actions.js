@@ -53,7 +53,13 @@ function run(argv) {
         const before = Number(pb.changeCount);
         press(8, ['command down']);
         for (let n = 0; n < 30 && Number(pb.changeCount) === before; n++) delay(0.02);
-        if (frontmost() && Number(pb.changeCount) !== before) pb.setStringForType($('move'), marker);
+        if (frontmost() && Number(pb.changeCount) !== before) {
+            // Extend Finder's clipboard types without discarding its file URLs.
+            pb.addTypesOwner([marker], null);
+            if (!pb.setStringForType($('move'), marker)) {
+                throw new Error('WinMac: could not mark Finder clipboard for a pending move');
+            }
+        }
     } else if (action === 'trash') press(51, ['command down']);
     else if (action === 'delete') press(51, ['command down', 'option down']);
     else if (action === 'rename') press(36);
