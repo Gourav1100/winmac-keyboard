@@ -49,8 +49,11 @@ bindings while preserving unrelated configuration.
 5. Open a new zsh session for the managed shell bindings to take effect.
 6. Finder operations use a JXA helper installed at
    `~/.config/winmac-keyboard/finder_actions.js`. Allow its macOS Automation and
-   Accessibility requests for System Events/Finder (the responsible launcher may
-   be shown). Unknown focus or denied access causes file operations to stop.
+   Accessibility requests for System Events/Finder. When invoked by Karabiner,
+   the responsible launcher is **Karabiner-Console-User-Server**, not your
+   terminal or a standalone osascript process. In System Settings → Privacy &
+   Security → Automation, expand that launcher and enable System Events
+   (and Finder if requested). Unknown focus or denied access stops file actions.
 
 External terminal profiles are necessary: Karabiner leaves Page Up/Down as real
 keyboard events, while a terminal can consume those events for scrollback instead
@@ -152,6 +155,30 @@ Applications remain installed. Remove any manually imported Terminal.app WinMac
 profile and kitty include line yourself; existing terminal sessions must be restarted.
 A second installation creates another backup; its uninstall restores the state
 immediately before that installation, not the first-ever state.
+
+### Finder troubleshooting
+
+Inspect the selected Karabiner profile, the connected keyboard in Devices, and
+that keyboard’s Simple Modifications. The generated Finder rules expect Command
+**after** physical Control is swapped; A/C remain native and X/V invoke the helper.
+Also inspect System Settings → Keyboard → Keyboard Shortcuts → App Shortcuts.
+Finder overrides such as Copy=`^c`, Paste=`^v`, Select All=`^a`, and Move to Bin=`^⌫`
+conflict with Karabiner: remove those overrides to restore native Command menu
+shortcuts. The doctor reports these conflicts but does not delete preferences.
+Do not add a second Control/Command swap in macOS. Confirm the K8 firmware mode
+and actual HID events instead of inferring them from keycap labels.
+
+Check `~/.local/share/karabiner/log/console_user_server.log` for helper errors.
+Error `-1743` indicates denied Automation; Karabiner Input Monitoring and
+Accessibility being enabled does not grant System Events Automation. Test from
+the actual Karabiner launcher, because running the helper in a terminal uses a
+different permission context. Grant permissions in System Settings, never by
+editing the TCC database.
+
+Use disposable files for copy, pending move, Trash and rename/search checks.
+Record physical keyboard presses separately from synthesized input: UI automation
+can exercise native Finder commands without traversing the device-scoped rules,
+and is not proof that physical Ctrl or Delete works.
 
 ### macOS acceptance checks
 
