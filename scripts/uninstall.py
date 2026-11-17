@@ -7,6 +7,8 @@ from install import read_alttab_preferences, stop_alttab, write_alttab_preferenc
 
 
 def main():
+    if (Path.home() / '.config/winmac-keyboard/deskflow-backup').exists():
+        raise SystemExit('First quit Deskflow and run scripts/deskflow.py --uninstall, then retry.')
     state = Path.home() / ".config/winmac-keyboard/latest.json"
     if not state.exists():
         raise SystemExit("No saved install manifest found")
