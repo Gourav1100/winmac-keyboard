@@ -213,3 +213,25 @@ contains immutable migration fingerprints, not the active configuration.
 - [Karabiner complex rules](https://karabiner-elements.pqrs.org/docs/json/)
 - [VS Code terminal shortcuts](https://code.visualstudio.com/docs/terminal/advanced)
 - [AltTab](https://alt-tab.app/)
+
+### Deskflow server passthrough (optional)
+
+Quit Deskflow, then run `python3 scripts/deskflow.py --install` and reopen it.
+When leaving this Mac for a remote computer, Deskflow selects a separate
+Karabiner passthrough profile with no shortcut rules or modifier swaps and
+Modify events disabled for the configured keyboard. Returning restores the
+previous profile. The normal profile is preserved, and existing Deskflow
+enter/exit commands are never overwritten. This uses screen transition hooks,
+not a foreground-window exclusion. New keyboards need the integration recreated.
+
+Release held keys before crossing screens and allow the profile switch to finish
+before typing. The hooks run after the transition; this is not a synchronous
+raw-HID forwarding guarantee. Deskflow's own modifier settings and keyboard
+firmware still apply. AltTab or other separately running remappers are not managed
+by this integration. If Deskflow stops while remote, select the normal Karabiner
+profile manually or run the installed helper with `--enter`.
+
+To remove it, quit Deskflow and run `python3 scripts/deskflow.py --uninstall`,
+then reopen Deskflow. This restores the pre-integration configuration snapshots
+and can overwrite subsequent edits. Remove this integration before running the
+main installer or uninstaller; re-enable it after upgrading if needed.
