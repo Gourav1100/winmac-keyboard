@@ -134,8 +134,10 @@ bindings can match the original Command events produced by physical Ctrl.
 
 Delete stays forward deletion in Finder rename/search text fields. Cut/paste also
 retain native text editing there. File actions require a recognized file-view
-focus and selection. Pending move state is stored as a custom clipboard type;
-copying something else replaces it, and pasting or Escape clears it. Changing
+focus and selection. Pending move state records the clipboard change counter in
+`~/.config/winmac-keyboard/pending-move`; it contains no file paths. The helper
+waits for Copy to settle and leaves Finder’s clipboard representations intact.
+Copying something else invalidates the counter, and pasting or Escape clears it. Changing
 folder/selection does not cancel the pending move, so navigating to a destination
 works. Finder handles file conflicts and permissions; the helper never runs `rm`.
 
