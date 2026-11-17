@@ -7,10 +7,19 @@ function scenario(action, role, {front = true, selected = true, pending = '', co
     const events = [];
     let marker = pending;
     let changes = 1;
+    let declared = !!pending;
     const pb = {
         get changeCount() { return changes; },
         stringForType() { return marker; },
-        setStringForType(value) { marker = value; changes++; },
+        addTypesOwner(types, owner) {
+            assert.deepEqual(Array.from(types), ['org.winmac-keyboard.pending-move']);
+            assert.equal(owner, null);
+            declared = true;
+        },
+        setStringForType(value) {
+            if (!declared) return false;
+            marker = value; changes++; return true;
+        },
     };
     const $ = x => x;
     $.NSPasteboard = {generalPasteboard: pb};
@@ -20,7 +29,7 @@ function scenario(action, role, {front = true, selected = true, pending = '', co
     const se = {processes: {byName: () => ({attributes: {byName: () => attr(element)}})},
         keyCode(code, options) {
             events.push([code, options.using]);
-            if (code === 8 && copied) { marker = ''; changes++; }
+            if (code === 8 && copied) { marker = ''; declared = false; changes++; }
         }};
     const finder = {frontmost: () => front, selection: () => selected ? ['file'] : []};
     const context = vm.createContext({$, ObjC: {import() {}, unwrap: x => x},
