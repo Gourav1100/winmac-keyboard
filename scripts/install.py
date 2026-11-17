@@ -232,6 +232,8 @@ def main():
     p.add_argument('--import-snapshot', action='store_true',
                    help='Explicitly restore the captured configuration instead of maintained defaults')
     a = p.parse_args()
+    if (STATE / 'deskflow-backup').exists():
+        p.error('Remove Deskflow integration with scripts/deskflow.py --uninstall before upgrading; then reinstall it.')
     if platform.system() != "Darwin" and not a.dry_run:
         p.error("Installation requires macOS. Use --dry-run for inspection elsewhere.")
     if (a.vendor_id is None) != (a.product_id is None):
