@@ -144,7 +144,7 @@ class TestInstall(unittest.TestCase):
             with mock.patch.multiple(install, **patches), mock.patch.object(
                 install.platform, "system", return_value="Darwin"
             ), mock.patch.object(
-                sys, "argv", ["install.py", "--skip-brew"]
+                sys, "argv", ["install.py", "--skip-brew", "--import-snapshot"]
             ), mock.patch.object(
                 install, "stop_alttab"
             ), mock.patch.object(
@@ -208,6 +208,73 @@ class TestInstall(unittest.TestCase):
                 self.assertEqual(install.load(karabiner), first_install)
                 self.assertEqual(install.load(vscode), first_bindings)
                 self.assertEqual(zshrc.read_text(), first_zshrc)
+
+
+class TestDefaultInstall(unittest.TestCase):
+    def test_fresh_alttab_has_no_persistent_domain(self):
+        result = mock.Mock(returncode=1, stderr=b'Domain com.lwouis.alt-tab-macos does not exist')
+        with mock.patch.object(install.subprocess, 'run', return_value=result):
+            self.assertEqual(install.read_alttab_preferences(), {})
+
+    def test_alttab_backup_errors_are_not_silently_ignored(self):
+        result = mock.Mock(returncode=1, stderr=b'Permission denied')
+        with mock.patch.object(install.subprocess, 'run', return_value=result):
+            with self.assertRaisesRegex(RuntimeError, 'Cannot back up'):
+                install.read_alttab_preferences()
+
+    def test_defaults_migrate_and_restore_profiles_without_snapshot_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / '.config/winmac-keyboard'
+            karabiner = root / 'karabiner.json'
+            vscode = root / 'keybindings.json'
+            zshrc = root / '.zshrc'
+            snapshot = root / 'system.json'
+            iterm = root / 'Library/Application Support/iTerm2/DynamicProfiles/winmac.json'
+            config = {'profiles': [{'selected': True, 'devices': [{'identifiers': {
+                'is_keyboard': True, 'vendor_id': 1, 'product_id': 2}}],
+                'complex_modifications': {'rules': [{'description': 'Terminal - restore Windows Ctrl+C interrupt', 'manipulators': []},
+                                                    {'description': 'my custom rule', 'manipulators': []}]}}]}
+            install.write(karabiner, config)
+            install.write(snapshot, {'rules': [{'description': 'stale snapshot'}]})
+            legacy = {'key': 'cmd+c', 'command': 'workbench.action.terminal.sendSequence',
+                      'args': {'text': '\x03'}, 'when': 'terminalFocus && !terminalTextSelected'}
+            custom = {'key': 'f9', 'command': 'custom.command'}
+            install.write(vscode, [legacy, custom])
+            zshrc.write_text('export EDITOR=vim\n')
+            iterm.parent.mkdir(parents=True)
+            iterm.write_text('{"existing": true}\n')
+            original_profile = iterm.read_bytes()
+            prefs = {'holdShortcut': 'old', 'other': 'preserved'}
+            with mock.patch.multiple(install, HOME=root, STATE=state, KARABINER=karabiner,
+                                     VSCODE=vscode, ZSHRC=zshrc, SNAPSHOT=snapshot,
+                                     RULES_FILE=root / 'rules.json'), \
+                 mock.patch.object(install.platform, 'system', return_value='Darwin'), \
+                 mock.patch.object(sys, 'argv', ['install.py', '--skip-brew']), \
+                 mock.patch.object(install, 'stop_alttab'), \
+                 mock.patch.object(install, 'read_alttab_preferences', return_value=prefs), \
+                 mock.patch.object(install, 'write_alttab_preferences') as write_prefs, \
+                 mock.patch.object(install.subprocess, 'run'):
+                install.main()
+                bindings = install.load(vscode)
+                self.assertNotIn(legacy, bindings)
+                self.assertIn(custom, bindings)
+                self.assertTrue((state / 'finder_actions.js').exists())
+                self.assertTrue((state / 'WinMac.terminal').exists())
+                rules = install.load(karabiner)['profiles'][0]['complex_modifications']['rules']
+                self.assertEqual(rules[-1]['description'], 'my custom rule')
+                self.assertFalse(any(r['description'] == 'stale snapshot' for r in rules))
+                write_prefs.assert_called_once_with({'other': 'preserved'})
+                with mock.patch.object(Path, 'home', return_value=root), \
+                     mock.patch('builtins.input', return_value='RESTORE'), \
+                     mock.patch.object(uninstall, 'stop_alttab'), \
+                     mock.patch.object(uninstall, 'write_alttab_preferences'):
+                    uninstall.main()
+                self.assertEqual(iterm.read_bytes(), original_profile)
+                self.assertFalse((state / 'finder_actions.js').exists())
+                self.assertEqual(install.load(karabiner), config)
+                self.assertEqual(install.load(vscode), [legacy, custom])
+                self.assertEqual(zshrc.read_text(), 'export EDITOR=vim\n')
 
 
 if __name__ == "__main__":

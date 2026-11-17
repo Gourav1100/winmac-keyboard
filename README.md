@@ -1,127 +1,237 @@
 # WinMac Keyboard
 
-Windows-style keyboard behavior for macOS, with a physical **Windows keyboard**, VS Code, external terminals, and AltTab.
+Windows keyboard shortcuts on macOS using Karabiner-Elements, VS Code, zsh,
+Terminal/iTerm2/kitty, and AltTab. Physical Ctrl becomes Command in GUI apps;
+terminal Control shortcuts are restored before GUI translations run.
 
-This checkout includes a snapshot of the current Mac's active Karabiner rules, keyboard modifications, VS Code keybindings, AltTab preferences, and zsh keyboard bindings in `config/system.json`.
+## Install or upgrade
 
-> This repository is a local GitHub-ready project. It is not an official Karabiner, AltTab or VS Code project.
+Requires macOS, Python 3, Karabiner-Elements and AltTab. The installer can install
+the latter two through Homebrew. Launch Karabiner once, grant its permissions,
+and enable your external keyboard under Devices. Do not also swap modifiers in
+macOS System Settings.
 
-## Requirements
-
-- macOS with a Windows-layout keyboard
-- Python 3 (e.g. `python3` from Xcode tools or Homebrew)
-- [Homebrew](https://brew.sh/) (optional; the installer uses it to install apps)
-- [Karabiner-Elements](https://karabiner-elements.pqrs.org/), [AltTab](https://alt-tab.app/), [VS Code](https://code.visualstudio.com/)
-
-## One-command setup
-
-First launch **Karabiner-Elements** once and enable the external keyboard under **Devices**. This creates `~/.config/karabiner/karabiner.json` and enumerates the keyboard. If the apps are not installed yet, run the installer once to install Karabiner-Elements and AltTab using Homebrew, then launch Karabiner and rerun it.
-
-```bash
+```sh
+python3 scripts/install.py --dry-run
 python3 scripts/install.py
 ```
 
-The installer auto-detects a keyboard only when exactly **one** external keyboard appears in the selected Karabiner profile. Otherwise find **vendor_id** and **product_id** in Karabiner-EventViewer, and use:
+If exactly one external keyboard is not detected, specify its EventViewer IDs:
 
-```bash
+```sh
 python3 scripts/install.py --vendor-id 1234 --product-id 5678
 ```
 
-To intentionally modify **all keyboards** (including built-in):
+Use `--all-keyboards` to explicitly include built-in keyboards, or `--skip-brew`
+to manage applications yourself. VS Code must already be installed. Its regular
+macOS user settings path is managed; Insiders rules are supported by Karabiner,
+but its separate keybindings file must be populated from the generated export.
 
-```bash
-python3 scripts/install.py --all-keyboards
-```
+The maintained defaults come from `scripts/generate.py` and `scripts/shortcuts.py`.
+`config/system.json` is a historical snapshot and does **not** override defaults.
+`--import-snapshot` explicitly restores that older behavior, including its known
+terminal limitations. Upgrades remove known legacy rules and exact old VS Code
+bindings while preserving unrelated configuration.
 
-Options: `--dry-run`, `--skip-brew`. Your original configuration is backed up under `~/.config/winmac-keyboard/backups/`.
+### Finish setup on the Mac
 
-**Permissions and final AltTab setup:**
+1. Grant Karabiner Input Monitoring/Accessibility and system extension permissions.
+2. Grant AltTab Accessibility/Screen Recording. The installer resets its primary
+   hold/next/previous shortcut overrides to the app's Option+Tab and Shift defaults;
+   verify Controls and enable Start at login if desired. Other preferences remain.
+3. Reload VS Code. Its integrated-terminal bindings are installed automatically.
+4. Activate navigation settings for your external terminal:
+   - **Terminal.app:** open `~/.config/winmac-keyboard/WinMac.terminal` and use the
+     imported WinMac profile. Set it as Default if desired. Existing profiles remain.
+   - **iTerm2:** choose the **WinMac** dynamic profile for new sessions.
+   - **kitty:** add `include ~/.config/winmac-keyboard/kitty.conf` to `kitty.conf`
+     and restart kitty. Remove conflicting later key mappings if applicable.
+5. Open a new zsh session for the managed shell bindings to take effect.
+6. Finder operations use a JXA helper installed at
+   `~/.config/winmac-keyboard/finder_actions.js`. Allow its macOS Automation and
+   Accessibility requests for System Events/Finder. When invoked by Karabiner,
+   the responsible launcher is **Karabiner-Console-User-Server**, not your
+   terminal or a standalone osascript process. In System Settings → Privacy &
+   Security → Automation, expand that launcher and enable System Events
+   (and Finder if requested). Unknown focus or denied access stops file actions.
 
-1. **Karabiner-Elements**: allow Input Monitoring, Accessibility and system extension prompts; enable your external keyboard in Devices. Do **not** also swap modifier keys in macOS System Settings.
-2. **AltTab**: allow Accessibility and Screen Recording; verify the restored shortcuts in **Settings → Controls**. In General, enable **Start at login** if desired. macOS permissions and login items cannot be transferred by this installer.
-3. **VS Code**: restart or reload the window and confirm keybindings. The installer merges shortcut entries into `~/Library/Application Support/Code/User/keybindings.json`.
-4. Optional: enable standard F1–F12 in macOS Keyboard settings and/or your keyboard firmware.
+External terminal profiles are necessary: Karabiner leaves Page Up/Down as real
+keyboard events, while a terminal can consume those events for scrollback instead
+of forwarding them to nano. The profiles send Page Up/Down to the running program.
+They also configure Home/End, Delete, and Control word movement/deletion. Home/End
+are no longer forcibly replaced with Ctrl+A/E, which could break full-screen apps.
 
-### What gets installed
+## Shortcuts
 
-- Captured Karabiner simple modifications and complex rules, scoped to the chosen keyboard and merged into the active profile.
-- Captured VS Code keybindings, preserving unrelated bindings.
-- Captured zsh `bindkey` commands in a managed block in `~/.zshrc`, preserving other shell settings. Open a new shell to apply them.
-- AltTab macOS window switcher, installed and launched, with captured preferences restored (manual first-run permissions required).
-- Old rules from the prior experimental Windows configuration removed **only** when their descriptions match known legacy names.
+All keys below are **physical Windows keyboard keys**. Left/right Ctrl and
+Windows are swapped; Alt stays Option and Shift stays Shift. Launcher combinations
+use **left Windows**. App-native shortcuts remain subject to application support.
 
-### Shortcuts
+| Keys | Behavior |
+| --- | --- |
+| Ctrl+C/V/X/Z/A/S/F in GUI apps | Native copy/paste/cut/undo/select all/save/find |
+| Ctrl+Left/Right; Ctrl+Shift+Left/Right | Word movement/selection in GUI editors |
+| Ctrl+Backspace/Delete | Delete previous/next word in GUI editors |
+| Home/End; Shift+Home/End | Line start/end; select to line boundary |
+| Ctrl+Home/End; Ctrl+Shift+Home/End | Document start/end; select to document boundary |
+| Left Win tap | Spotlight |
+| Win+E; Win+R or Win+S; Win+L | Finder; Spotlight; lock screen |
+| Win+D; Win+Tab; Win+I | Show desktop; Mission Control; System Settings |
+| Alt+Tab / Alt+Shift+Tab | AltTab next/previous window |
+| Alt+F4 | Cmd+W: close current window/tab; does not force quit |
+| Ctrl+Shift+Esc | Activity Monitor outside terminals/VS Code; VS Code Process Explorer when its terminal is unfocused |
+| Print Screen | Entire screen to clipboard |
+| Win+Print Screen | Save entire-screen screenshot using macOS's configured location |
+| Win+Shift+S | macOS screenshot controls (Cmd+Shift+5) |
+| Alt+Print Screen | Interactive window screenshot to clipboard; click a window, Escape cancels |
 
-The table describes the project's generated fallback configuration. The captured snapshot takes precedence and may differ; inspect `config/system.json` for the actual installed rules and bindings.
+Screenshot shortcuts rely on macOS screenshot permissions/settings. Print Screen
+must report `print_screen` in Karabiner EventViewer; firmware Fn layers may differ.
+GUI applications receive ordinary Page Up/Down events; apps decide their scrolling
+behavior. This project does not emulate Windows-only features such as clipboard history.
 
-| Physical PC key                    | Behavior                                                             |
-| ---------------------------------- | -------------------------------------------------------------------- |
-| Ctrl+C/V/X/Z                       | Native macOS copy/paste/cut/undo in most apps                        |
-| Win (tap)                          | Spotlight launcher                                                   |
-| Win+E / Win+R / Win+L              | Finder / Spotlight / lock screen                                     |
-| Alt+Tab                            | AltTab's Windows-style window switcher                               |
-| Alt+F4                             | Command+Q (quit app, not merely close window)                        |
-| Home / End                         | Line start / line end in GUI apps; Ctrl+A/E in Terminal/iTerm2/kitty |
-| Ctrl+Home/End                      | Document start / document end in GUI apps and VS Code editor         |
-| Shift+Home/End                     | Select to start / end of line                                        |
-| Ctrl+Backspace/Delete              | Delete previous/next word in GUI apps (some apps override)           |
-| Page Up/Down / Forward Delete      | Original hardware events, not swallowed                              |
-| Insert in VS Code                  | Toggle overtype when editor focused                                  |
-| Ctrl+` in VS Code                  | Toggle integrated terminal without macOS window cycling              |
-| Ctrl+Shift+C/V in VS Code terminal | Copy selected text / paste                                           |
-| Ctrl+C in VS Code terminal         | Copy if selected, otherwise send interrupt                           |
-| F2 in Finder                       | Rename selection; VS Code keeps rename-symbol F2                     |
+### Terminal shortcuts, including nano
 
-### Shell note
+| Keys | Behavior |
+| --- | --- |
+| Ctrl+A through Ctrl+Z | Actual Control input, including Ctrl+X/O/W/K/U in nano |
+| Ctrl+C | Interrupt/cancel, even with selected terminal text |
+| Ctrl+V | Control+V to the program (next page in nano), not clipboard paste |
+| Ctrl+Shift+C / Ctrl+Shift+V | Terminal clipboard copy/paste |
+| Page Up/Down | Application paging with the WinMac terminal profile |
+| Home/End, Insert, Delete | Terminal navigation/editing events |
+| Ctrl+Left/Right | Word navigation; application support required |
+| Ctrl+Backspace/Delete | Word deletion sequences; application support required |
 
-The shell sequences Ctrl+A/E, Esc+B/F, Ctrl+W assume an Emacs-style shell keymap. The captured zsh bindings include `bindkey -e`. Full-screen apps such as Vim, tmux and nano may interpret keys differently. An external terminal's app-specific keyboard shortcuts may override these mappings.
+Ctrl+Shift+C/V are reserved for clipboard operations, so they do not send shifted
+Control input. Native Shift+Page Up/Down scrollback behavior varies by terminal.
+The shell uses Emacs bindings; full-screen programs and tmux interpret input
+independently. Terminal Home/End sequences and modified keys must be verified with
+your installed terminal/application versions. No nano-specific Ctrl+Y/V mapping is
+applied globally, since that would break other programs.
 
-### Limitations
+### VS Code
 
-Karabiner translates events, not application functionality. A global overtype mode is impossible without app support. Windows Explorer, clipboard history, Start menu and OS-specific terminal actions cannot be emulated exactly. Physical Ctrl+C in external terminal apps sends SIGINT; Ctrl+Shift+C copies. macOS app shortcuts like Ctrl+Shift+C may conflict with an app's existing features; the installer intentionally does **not** globally override this combination.
+Ctrl+backtick toggles the terminal. Insert toggles editor overtype. Alt+Left/Right
+navigate history, Ctrl+Page Up/Down switch tabs, and Ctrl+Alt+Up/Down add cursors
+when editing. Terminal focus overrides editor navigation and Control shortcuts;
+Ctrl+C always sends an interrupt, and Ctrl+Shift+C copies. Home/End and Page keys
+send terminal sequences. The global Karabiner word rules exclude VS Code so these
+bindings can match the original Command events produced by physical Ctrl.
 
-AltTab preferences are imported through macOS `defaults`; preference formats and shortcuts may change between AltTab versions, so verify them after installation. Machine-specific telemetry, window positions, update state, and onboarding state are excluded.
+### Finder
 
-### Refresh the captured configuration
+| Keys | Behavior |
+| --- | --- |
+| Delete | Move selected files to Trash |
+| Shift+Delete | Native Delete Immediately, retaining Finder's confirmation |
+| F2 | Rename selected item |
+| Alt+Enter | Get Info |
+| Alt+Up; Alt+Left/Right | Parent folder; back/forward |
+| Ctrl+C / Ctrl+V | Copy/paste files |
+| Ctrl+X then Ctrl+V | Copy a pending move, then native Move Item Here |
+| Escape | Cancel pending move |
 
-After changing your settings on the source Mac, run:
+Delete stays forward deletion in Finder rename/search text fields. Cut/paste also
+retain native text editing there. File actions require a recognized file-view
+focus and selection. Pending move state records the clipboard change counter in
+`~/.config/winmac-keyboard/pending-move`; it contains no file paths. The helper
+waits for Copy to settle and leaves Finder’s clipboard representations intact.
+Copying something else invalidates the counter, and pasting or Escape clears it. Changing
+folder/selection does not cancel the pending move, so navigating to a destination
+works. Finder handles file conflicts and permissions; the helper never runs `rm`.
 
-```bash
-python3 scripts/capture.py
-```
+## Diagnose, test, restore
 
-If more than one keyboard is present, pass `--vendor-id N --product-id N`. This replaces `config/system.json` with the selected keyboard's simple modifications, the active profile's complex rules, VS Code keybindings, portable AltTab preferences, and standalone `bindkey` lines from `~/.zshrc`. Other shell settings, including paths and credentials, are not copied. Review the snapshot for private paths or commands before publishing it. On the destination, rerun `scripts/install.py`; source keyboard conditions are retargeted to the selected destination keyboard. Existing global rules in the snapshot become keyboard-scoped unless `--all-keyboards` is used. Captured rules containing source-device conditions cannot be installed with `--all-keyboards`.
-
-## Diagnose / restore
-
-```bash
+```sh
 python3 scripts/doctor.py
 python3 -m unittest discover -s tests -v
+node tests/test_finder.js  # optional developer-only Node control-flow tests
 python3 scripts/uninstall.py
 ```
 
-Uninstall restores **the backed-up original files and AltTab preferences** and can overwrite later edits. AltTab and Karabiner apps remain installed. Each installation creates a new backup; uninstall restores the most recent one.
+Backups are under `~/.config/winmac-keyboard/backups/`. Uninstall restores the most
+recent installation's original files and AltTab preferences, including generated
+terminal profile files and Finder helper. It can overwrite edits made afterward.
+Applications remain installed. Remove any manually imported Terminal.app WinMac
+profile and kitty include line yourself; existing terminal sessions must be restarted.
+A second installation creates another backup; its uninstall restores the state
+immediately before that installation, not the first-ever state.
 
-## Publish to GitHub
+### Finder troubleshooting
 
-```bash
-git init
-git add .
-git commit -m "Initial Windows keyboard setup for macOS"
-gh repo create winmac-keyboard --public --source=. --remote=origin --push
-```
+Inspect the selected Karabiner profile, the connected keyboard in Devices, and
+that keyboard’s Simple Modifications. The generated Finder rules expect Command
+**after** physical Control is swapped; A/C remain native and X/V invoke the helper.
+Also inspect System Settings → Keyboard → Keyboard Shortcuts → App Shortcuts.
+Finder overrides such as Copy=`^c`, Paste=`^v`, Select All=`^a`, and Move to Bin=`^⌫`
+conflict with Karabiner: remove those overrides to restore native Command menu
+shortcuts. The doctor reports these conflicts but does not delete preferences.
+Do not add a second Control/Command swap in macOS. Confirm the K8 firmware mode
+and actual HID events instead of inferring them from keycap labels.
 
-This last command requires [GitHub CLI](https://cli.github.com/) and authentication (`gh auth login`). Nothing is uploaded automatically by the installer.
+Check `~/.local/share/karabiner/log/console_user_server.log` for helper errors.
+Error `-1743` indicates denied Automation; Karabiner Input Monitoring and
+Accessibility being enabled does not grant System Events Automation. Test from
+the actual Karabiner launcher, because running the helper in a terminal uses a
+different permission context. Grant permissions in System Settings, never by
+editing the TCC database.
+
+Use disposable files for copy, pending move, Trash and rename/search checks.
+Record physical keyboard presses separately from synthesized input: UI automation
+can exercise native Finder commands without traversing the device-scoped rules,
+and is not proof that physical Ctrl or Delete works.
+
+### macOS acceptance checks
+
+Automated tests validate mappings, migration, rollback, and helper decision logic.
+Actual macOS Accessibility, profile imports and UI behavior require these checks:
+
+- In nano: Ctrl+X/O/W/K/U, Ctrl+C/V, Page Up/Down, Home/End and Delete.
+- In zsh, Vim and tmux: navigation, Control input and clipboard operations.
+- In VS Code: repeat terminal checks, then verify editor shortcuts separately.
+- In Finder: test disposable files, rename/search fields, cut/paste, cancellation,
+  Trash and the Delete Immediately confirmation.
+- Test each screenshot target, clipboard versus saved file, cancel, desktop,
+  Mission Control, lock screen and both AltTab directions.
+
+## Capture and generated assets
+
+`python3 scripts/capture.py` captures a source Mac into `config/system.json`.
+Specify device IDs if necessary. Review captures for private paths before sharing.
+Importing a capture is an explicit `--import-snapshot` operation; it does not include
+new default terminal profiles or the Finder helper.
+
+`config/karabiner.example.json` and `config/vscode-keybindings.json` are reviewable
+exports. Do not enable the Karabiner asset again after installation: active rules
+are already merged into the selected profile. `config/vscode-keybindings.legacy.json`
+contains immutable migration fingerprints, not the active configuration.
 
 ## References
 
 - [Karabiner event modification order](https://karabiner-elements.pqrs.org/docs/manual/misc/event-modification-chaining/)
-- [Karabiner complex modification manual](https://karabiner-elements.pqrs.org/docs/json/)
-- [VS Code integrated terminal shortcuts](https://code.visualstudio.com/docs/terminal/advanced)
+- [Karabiner complex rules](https://karabiner-elements.pqrs.org/docs/json/)
+- [VS Code terminal shortcuts](https://code.visualstudio.com/docs/terminal/advanced)
 - [AltTab](https://alt-tab.app/)
 
-## Developer notes
+### Deskflow server passthrough (optional)
 
-`config/system.json` is the captured source configuration. If it is absent, `scripts/install.py` falls back to the generated examples. The installer merges rules directly into the selected Karabiner profile. **Do not separately enable the generated asset rule from Complex Modifications after installation**; that would duplicate the installed active rules. The asset is a reviewable export for manual use.
+Quit Deskflow, then run `python3 scripts/deskflow.py --install` and reopen it.
+When leaving this Mac for a remote computer, Deskflow selects a separate
+Karabiner passthrough profile with no shortcut rules or modifier swaps and
+Modify events disabled for the configured keyboard. Returning restores the
+previous profile. The normal profile is preserved, and existing Deskflow
+enter/exit commands are never overwritten. This uses screen transition hooks,
+not a foreground-window exclusion. New keyboards need the integration recreated.
 
-VS Code `keybindings.json` may contain `//` comments and trailing commas; the installer reads both and writes standard JSON while preserving unrelated keybinding objects (formatting and comments are not preserved). Backups keep the original file.
+Release held keys before crossing screens and allow the profile switch to finish
+before typing. The hooks run after the transition; this is not a synchronous
+raw-HID forwarding guarantee. Deskflow's own modifier settings and keyboard
+firmware still apply. AltTab or other separately running remappers are not managed
+by this integration. If Deskflow stops while remote, select the normal Karabiner
+profile manually or run the installed helper with `--enter`.
+
+To remove it, quit Deskflow and run `python3 scripts/deskflow.py --uninstall`,
+then reopen Deskflow. This restores the pre-integration configuration snapshots
+and can overwrite subsequent edits. Remove this integration before running the
+main installer or uninstaller; re-enable it after upgrading if needed.
